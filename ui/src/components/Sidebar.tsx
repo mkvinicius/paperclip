@@ -11,6 +11,7 @@ import {
   Boxes,
   Repeat,
   Settings,
+  ChefHat,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -101,6 +102,10 @@ export function Sidebar() {
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+        </SidebarSection>
+
+        <SidebarSection label="CMV">
+          <SidebarNavItem to="/cmv" label="Dashboard CMV" icon={ChefHat} />
         </SidebarSection>
 
         <SidebarProjects />

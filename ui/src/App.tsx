@@ -23,6 +23,7 @@ import { Approvals } from "./pages/Approvals";
 import { ApprovalDetail } from "./pages/ApprovalDetail";
 import { Costs } from "./pages/Costs";
 import { Activity } from "./pages/Activity";
+import { CmvDashboard } from "./pages/CmvDashboard";
 import { Inbox } from "./pages/Inbox";
 import { CompanySettings } from "./pages/CompanySettings";
 import { CompanySkills } from "./pages/CompanySkills";
@@ -171,6 +172,7 @@ function boardRoutes() {
       <Route path="approvals/all" element={<Approvals />} />
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="costs" element={<Costs />} />
+      <Route path="cmv" element={<CmvDashboard />} />
       <Route path="activity" element={<Activity />} />
       <Route path="inbox" element={<InboxRootRedirect />} />
       <Route path="inbox/mine" element={<Inbox />} />
