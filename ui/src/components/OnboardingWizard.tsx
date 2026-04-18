@@ -53,12 +53,31 @@ import {
   Check,
   Loader2,
   ChevronDown,
-  X
+  X,
+  ChefHat,
+  Store,
+  Tag,
+  DollarSign,
+  Package,
+  Truck,
+  Calculator,
+  FileText
 } from "lucide-react";
 
 
 type Step = 1 | 2 | 3 | 4;
+type Mode = 'select' | 'generic' | 'cmv';
+type CmvStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 type AdapterType = string;
+
+const BUSINESS_TYPES = [
+  "Buffet por quilo",
+  "Marmitaria",
+  "Restaurante à la carte",
+  "Pizzaria",
+  "Hamburgueria",
+  "Padaria",
+] as const;
 
 const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
 
@@ -96,6 +115,17 @@ export function OnboardingWizard() {
   const existingCompanyId = effectiveOnboardingOptions.companyId;
 
   const [step, setStep] = useState<Step>(initialStep);
+  const [mode, setMode] = useState<Mode>('select');
+  const [cmvStep, setCmvStep] = useState<CmvStep>(1);
+  const [cmvBusinessName, setCmvBusinessName] = useState("");
+  const [cmvBusinessType, setCmvBusinessType] = useState("");
+  const [cmvBusinessTypeOther, setCmvBusinessTypeOther] = useState("");
+  const [cmvAveragePrice, setCmvAveragePrice] = useState("");
+  const [cmvIngredients, setCmvIngredients] = useState("");
+  const [cmvSuppliers, setCmvSuppliers] = useState("");
+  const [cmvFixedCosts, setCmvFixedCosts] = useState("");
+  const [cmvHasRecipe, setCmvHasRecipe] = useState<"yes" | "no" | "">("");
+  const [cmvRecipeDescription, setCmvRecipeDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
@@ -163,6 +193,8 @@ export function OnboardingWizard() {
     if (!effectiveOnboardingOpen) return;
     const cId = effectiveOnboardingOptions.companyId ?? null;
     setStep(effectiveOnboardingOptions.initialStep ?? 1);
+    setMode('select');
+    setCmvStep(1);
     setCreatedCompanyId(cId);
     setCreatedCompanyPrefix(null);
     setCreatedCompanyGoalId(null);
@@ -282,6 +314,17 @@ export function OnboardingWizard() {
 
   function reset() {
     setStep(1);
+    setMode('select');
+    setCmvStep(1);
+    setCmvBusinessName("");
+    setCmvBusinessType("");
+    setCmvBusinessTypeOther("");
+    setCmvAveragePrice("");
+    setCmvIngredients("");
+    setCmvSuppliers("");
+    setCmvFixedCosts("");
+    setCmvHasRecipe("");
+    setCmvRecipeDescription("");
     setLoading(false);
     setError(null);
     setCompanyName("");
@@ -532,6 +575,133 @@ export function OnboardingWizard() {
     setStep(4);
   }
 
+  function handleCmvNext() {
+    setCmvStep((s) => Math.min(s + 1, 8) as CmvStep);
+  }
+
+  function handleCmvBack() {
+    if (cmvStep === 1) {
+      setMode('select');
+    } else {
+      setCmvStep((s) => (s - 1) as CmvStep);
+    }
+  }
+
+  function isCmvStepValid(): boolean {
+    switch (cmvStep) {
+      case 1: return cmvBusinessName.trim().length > 0;
+      case 2: return cmvBusinessType !== "" && (cmvBusinessType !== "Outro" || cmvBusinessTypeOther.trim().length > 0);
+      case 3: return true;
+      case 4: return true;
+      case 5: return true;
+      case 6: return true;
+      case 7: return cmvHasRecipe !== "";
+      case 8: return true;
+      default: return false;
+    }
+  }
+
+  function buildCmvOnboardingDescription(): string {
+    const type = cmvBusinessType === "Outro" ? cmvBusinessTypeOther.trim() : cmvBusinessType;
+    const price = cmvAveragePrice ? `R$ ${cmvAveragePrice}` : "não informado";
+    const fixedCosts = cmvFixedCosts ? `R$ ${cmvFixedCosts}/mês` : "não informado";
+    const recipeSection = cmvHasRecipe === "yes"
+      ? (cmvRecipeDescription.trim() || "(o dono vai descrever em breve)")
+      : "Ainda não disponível — construir junto com o dono.";
+
+    return `Você é o CEO — Conselheiro de Lucro deste negócio. Seu primeiro objetivo é configurar o sistema de Gestão de CMV.
+
+## Perfil do Negócio
+
+- **Nome**: ${cmvBusinessName.trim()}
+- **Tipo**: ${type}
+- **Preço médio de venda**: ${price}
+- **Custo fixo mensal**: ${fixedCosts}
+
+## Insumos Principais
+
+${cmvIngredients.trim() || "(nenhum informado ainda — pedir ao dono na próxima conversa)"}
+
+## Fornecedores
+
+${cmvSuppliers.trim() || "(nenhum informado ainda — pedir ao dono na próxima conversa)"}
+
+## Ficha Técnica
+
+${recipeSection}
+
+---
+
+## Suas tarefas iniciais
+
+1. Criar o perfil completo do negócio no sistema
+2. Registrar insumos e fornecedores listados acima
+3. Calcular estimativa inicial de CMV com base nos dados fornecidos
+4. Gerar primeiro briefing de boas-vindas
+5. Enviar mensagem de boas-vindas pelo WhatsApp com resumo do setup
+
+Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diario\`.`;
+  }
+
+  async function handleCmvLaunch() {
+    setLoading(true);
+    setError(null);
+    try {
+      const name = cmvBusinessName.trim();
+
+      const company = await companiesApi.create({ name });
+      setCreatedCompanyId(company.id);
+      setCreatedCompanyPrefix(company.issuePrefix);
+      setSelectedCompanyId(company.id);
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+
+      const goal = await goalsApi.create(company.id, {
+        title: `Gestão de CMV — ${name}`,
+        level: "company",
+        status: "active",
+      });
+      setCreatedCompanyGoalId(goal.id);
+      queryClient.invalidateQueries({ queryKey: queryKeys.goals.list(company.id) });
+
+      const agent = await agentsApi.create(company.id, {
+        name: "CEO — Conselheiro de Lucro",
+        role: "ceo",
+        adapterType: "claude_local",
+        adapterConfig: buildAdapterConfig(),
+        runtimeConfig: buildNewAgentRuntimeConfig(),
+      });
+      setCreatedAgentId(agent.id);
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(company.id) });
+
+      const project = await projectsApi.create(company.id, buildOnboardingProjectPayload(goal.id));
+      setCreatedProjectId(project.id);
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.list(company.id) });
+
+      const issue = await issuesApi.create(
+        company.id,
+        buildOnboardingIssuePayload({
+          title: `Configurar sistema de CMV — ${name}`,
+          description: buildCmvOnboardingDescription(),
+          assigneeAgentId: agent.id,
+          projectId: project.id,
+          goalId: goal.id,
+        })
+      );
+      const issueRef = issue.identifier ?? issue.id;
+      setCreatedIssueRef(issueRef);
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(company.id) });
+
+      const prefix = company.issuePrefix;
+      reset();
+      closeOnboarding();
+      navigate(prefix ? `/${prefix}/issues/${issueRef}` : `/issues/${issueRef}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao criar empresa de CMV");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleLaunch() {
     if (!createdCompanyId || !createdAgentId) return;
     setLoading(true);
@@ -594,6 +764,11 @@ export function OnboardingWizard() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
+      if (mode === 'cmv') {
+        if (cmvStep < 8 && isCmvStepValid()) handleCmvNext();
+        else if (cmvStep === 8 && !loading) void handleCmvLaunch();
+        return;
+      }
       if (step === 1 && companyName.trim()) handleStep1Next();
       else if (step === 2 && agentName.trim()) handleStep2Next();
       else if (step === 3 && taskTitle.trim()) handleStep3Next();
@@ -632,39 +807,443 @@ export function OnboardingWizard() {
           <div
             className={cn(
               "w-full flex flex-col overflow-y-auto transition-[width] duration-500 ease-in-out",
-              step === 1 ? "md:w-1/2" : "md:w-full"
+              (mode === 'select' || (mode === 'generic' && step === 1)) ? "md:w-1/2" : "md:w-full"
             )}
           >
             <div className="w-full max-w-md mx-auto my-auto px-8 py-12 shrink-0">
-              {/* Progress tabs */}
-              <div className="flex items-center gap-0 mb-8 border-b border-border">
-                {(
-                  [
-                    { step: 1 as Step, label: "Company", icon: Building2 },
-                    { step: 2 as Step, label: "Agent", icon: Bot },
-                    { step: 3 as Step, label: "Task", icon: ListTodo },
-                    { step: 4 as Step, label: "Launch", icon: Rocket }
-                  ] as const
-                ).map(({ step: s, label, icon: Icon }) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStep(s)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                      s === step
-                        ? "border-foreground text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {/* Progress tabs — generic mode */}
+              {mode === 'generic' && (
+                <div className="flex items-center gap-0 mb-8 border-b border-border">
+                  {(
+                    [
+                      { step: 1 as Step, label: "Company", icon: Building2 },
+                      { step: 2 as Step, label: "Agent", icon: Bot },
+                      { step: 3 as Step, label: "Task", icon: ListTodo },
+                      { step: 4 as Step, label: "Launch", icon: Rocket }
+                    ] as const
+                  ).map(({ step: s, label, icon: Icon }) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setStep(s)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors cursor-pointer",
+                        s === step
+                          ? "border-foreground text-foreground"
+                          : "border-transparent text-muted-foreground hover:text-foreground/70 hover:border-border"
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Progress bar — CMV mode */}
+              {mode === 'cmv' && (
+                <div className="flex items-center gap-1 mb-8">
+                  {([1, 2, 3, 4, 5, 6, 7, 8] as CmvStep[]).map((s) => (
+                    <div
+                      key={s}
+                      className={cn(
+                        "h-1 flex-1 rounded-full transition-colors duration-300",
+                        s <= cmvStep ? "bg-foreground" : "bg-border"
+                      )}
+                    />
+                  ))}
+                  <span className="ml-2 text-xs text-muted-foreground whitespace-nowrap">
+                    {cmvStep < 8 ? `${cmvStep} / 7` : "Revisão"}
+                  </span>
+                </div>
+              )}
 
               {/* Step content */}
-              {step === 1 && (
+
+              {/* Mode selection */}
+              {mode === 'select' && (
+                <div className="space-y-4">
+                  <div className="mb-5">
+                    <h3 className="font-medium">Como você quer começar?</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Escolha o tipo de empresa que quer criar.
+                    </p>
+                  </div>
+                  <button
+                    className="w-full flex items-start gap-3 rounded-md border border-border p-4 text-left hover:bg-accent/50 transition-colors"
+                    onClick={() => setMode('generic')}
+                  >
+                    <div className="bg-muted/50 p-2 mt-0.5 shrink-0">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Empresa genérica</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Configure qualquer tipo de empresa com agentes de IA personalizados.
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    className="w-full flex items-start gap-3 rounded-md border border-foreground/30 bg-accent/20 p-4 text-left hover:bg-accent/50 transition-colors"
+                    onClick={() => { setMode('cmv'); setCmvStep(1); }}
+                  >
+                    <div className="bg-muted/50 p-2 mt-0.5 shrink-0">
+                      <ChefHat className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Gestão de CMV</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Para restaurantes, marmitarias, buffets e food service.
+                        Configure CMV, fornecedores e ponto de equilíbrio em 7 passos.
+                      </p>
+                      <span className="mt-2 inline-block text-[10px] font-semibold uppercase tracking-wide text-green-600 dark:text-green-400">
+                        Recomendado para food service
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* CMV Step 1 — Business name */}
+              {mode === 'cmv' && cmvStep === 1 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Store className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Qual o nome do seu negócio?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        É o nome que vai aparecer no sistema.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="group">
+                    <label className={cn("text-xs mb-1 block transition-colors", cmvBusinessName.trim() ? "text-foreground" : "text-muted-foreground group-focus-within:text-foreground")}>
+                      Nome do negócio
+                    </label>
+                    <input
+                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                      placeholder="Ex: Buffet do João, Marmitas da Cida..."
+                      value={cmvBusinessName}
+                      onChange={(e) => setCmvBusinessName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CMV Step 2 — Business type */}
+              {mode === 'cmv' && cmvStep === 2 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Tag className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Qual o tipo do negócio?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Isso calibra os benchmarks de CMV.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {BUSINESS_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        className={cn(
+                          "flex items-center justify-center rounded-md border p-3 text-xs font-medium transition-colors text-center",
+                          cmvBusinessType === type
+                            ? "border-foreground bg-accent"
+                            : "border-border hover:bg-accent/50"
+                        )}
+                        onClick={() => setCmvBusinessType(type)}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                    <button
+                      className={cn(
+                        "flex items-center justify-center rounded-md border p-3 text-xs font-medium transition-colors col-span-2",
+                        cmvBusinessType === "Outro"
+                          ? "border-foreground bg-accent"
+                          : "border-border hover:bg-accent/50"
+                      )}
+                      onClick={() => setCmvBusinessType("Outro")}
+                    >
+                      Outro
+                    </button>
+                  </div>
+                  {cmvBusinessType === "Outro" && (
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Qual tipo?
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                        placeholder="Descreva o tipo do seu negócio"
+                        value={cmvBusinessTypeOther}
+                        onChange={(e) => setCmvBusinessTypeOther(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CMV Step 3 — Average price */}
+              {mode === 'cmv' && cmvStep === 3 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Qual o seu preço médio de venda?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Ex: preço do quilo (buffet), ticket médio (à la carte), preço do combo.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="group">
+                    <label className={cn("text-xs mb-1 block transition-colors", cmvAveragePrice ? "text-foreground" : "text-muted-foreground group-focus-within:text-foreground")}>
+                      Preço médio de venda
+                    </label>
+                    <div className="flex items-center rounded-md border border-border focus-within:ring-1 focus-within:ring-ring">
+                      <span className="pl-3 text-sm text-muted-foreground">R$</span>
+                      <input
+                        className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground/50"
+                        placeholder="0,00"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={cmvAveragePrice}
+                        onChange={(e) => setCmvAveragePrice(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Pode pular se ainda não souber — campo opcional.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* CMV Step 4 — Main ingredients */}
+              {mode === 'cmv' && cmvStep === 4 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Package className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Quais são seus insumos principais?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Liste quantos quiser, um por linha. Não há limite mínimo.
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Insumos principais
+                    </label>
+                    <textarea
+                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[150px]"
+                      placeholder={"Frango (kg)\nArroz (kg)\nFeijão (kg)\nÓleo de soja (L)\n..."}
+                      value={cmvIngredients}
+                      onChange={(e) => setCmvIngredients(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CMV Step 5 — Suppliers */}
+              {mode === 'cmv' && cmvStep === 5 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Truck className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Quais são seus fornecedores principais?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Para cada um, informe o nome e o que ele fornece.
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Fornecedores
+                    </label>
+                    <textarea
+                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[150px]"
+                      placeholder={"Distribuidora ABC — carnes e aves\nMercado Central — hortifruti\nAtacadão — secos e embalagens\n..."}
+                      value={cmvSuppliers}
+                      onChange={(e) => setCmvSuppliers(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CMV Step 6 — Fixed costs */}
+              {mode === 'cmv' && cmvStep === 6 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Calculator className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Qual o seu custo fixo mensal aproximado?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Inclua aluguel, energia, salários e outros custos que não variam com as vendas.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="group">
+                    <label className={cn("text-xs mb-1 block transition-colors", cmvFixedCosts ? "text-foreground" : "text-muted-foreground group-focus-within:text-foreground")}>
+                      Custo fixo mensal
+                    </label>
+                    <div className="flex items-center rounded-md border border-border focus-within:ring-1 focus-within:ring-ring">
+                      <span className="pl-3 text-sm text-muted-foreground">R$</span>
+                      <input
+                        className="flex-1 bg-transparent py-2 px-2 text-sm outline-none placeholder:text-muted-foreground/50"
+                        placeholder="0,00"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={cmvFixedCosts}
+                        onChange={(e) => setCmvFixedCosts(e.target.value)}
+                        autoFocus
+                      />
+                      <span className="pr-3 text-sm text-muted-foreground">/mês</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Pode pular se ainda não souber — campo opcional.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* CMV Step 7 — Recipe */}
+              {mode === 'cmv' && cmvStep === 7 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Você tem ficha técnica dos seus pratos?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        A ficha lista ingredientes e quantidades por prato.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      className={cn(
+                        "flex flex-col items-center gap-2 rounded-md border p-4 text-xs font-medium transition-colors",
+                        cmvHasRecipe === "yes"
+                          ? "border-foreground bg-accent"
+                          : "border-border hover:bg-accent/50"
+                      )}
+                      onClick={() => setCmvHasRecipe("yes")}
+                    >
+                      <Check className="h-4 w-4" />
+                      Sim, vou descrever agora
+                    </button>
+                    <button
+                      className={cn(
+                        "flex flex-col items-center gap-2 rounded-md border p-4 text-xs font-medium transition-colors",
+                        cmvHasRecipe === "no"
+                          ? "border-foreground bg-accent"
+                          : "border-border hover:bg-accent/50"
+                      )}
+                      onClick={() => setCmvHasRecipe("no")}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      Ainda não, vamos construir juntos
+                    </button>
+                  </div>
+                  {cmvHasRecipe === "yes" && (
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Descreva os pratos principais e seus ingredientes
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 resize-none min-h-[130px]"
+                        placeholder={"Prato proteico (100g): frango 120g, arroz 150g, feijão 80g\nSalada (porção): alface 50g, tomate 30g, cenoura 20g\n..."}
+                        value={cmvRecipeDescription}
+                        onChange={(e) => setCmvRecipeDescription(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CMV Step 8 — Launch review */}
+              {mode === 'cmv' && cmvStep === 8 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <Rocket className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Tudo pronto para criar sua empresa de CMV</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Confirme os dados abaixo e clique em criar.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border border-border divide-y divide-border text-sm">
+                    <div className="flex items-start gap-2 px-3 py-2.5">
+                      <Store className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium">{cmvBusinessName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {cmvBusinessType === "Outro" ? cmvBusinessTypeOther : cmvBusinessType}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-2.5">
+                      <DollarSign className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium">
+                          {cmvAveragePrice ? `R$ ${cmvAveragePrice} preço médio` : "Preço médio não informado"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {cmvFixedCosts ? `Custo fixo: R$ ${cmvFixedCosts}/mês` : "Custo fixo não informado"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-2.5">
+                      <Package className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium">
+                          {cmvIngredients.split("\n").filter(Boolean).length} insumos registrados
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {cmvSuppliers.split("\n").filter(Boolean).length} fornecedores
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-2.5">
+                      <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <p className="text-xs text-muted-foreground">
+                        {cmvHasRecipe === "yes" ? "Ficha técnica informada" : "Ficha técnica: construir junto"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O agente <strong>CEO — Conselheiro de Lucro</strong> será criado automaticamente e iniciará o setup do seu sistema de CMV.
+                  </p>
+                </div>
+              )}
+
+              {/* Generic Step 1 */}
+              {mode === 'generic' && step === 1 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -717,7 +1296,8 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 2 && (
+              {/* Generic Step 2 */}
+              {mode === 'generic' && step === 2 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1088,7 +1668,8 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 3 && (
+              {/* Generic Step 3 */}
+              {mode === 'generic' && step === 3 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1129,7 +1710,8 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {step === 4 && (
+              {/* Generic Step 4 */}
+              {mode === 'generic' && step === 4 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1190,7 +1772,8 @@ export function OnboardingWizard() {
               {/* Footer navigation */}
               <div className="flex items-center justify-between mt-8">
                 <div>
-                  {step > 1 && step > (onboardingOptions.initialStep ?? 1) && (
+                  {/* Back — generic mode */}
+                  {mode === 'generic' && step > 1 && step > (onboardingOptions.initialStep ?? 1) && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1201,9 +1784,22 @@ export function OnboardingWizard() {
                       Back
                     </Button>
                   )}
+                  {/* Back — CMV mode */}
+                  {mode === 'cmv' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCmvBack}
+                      disabled={loading}
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                      Voltar
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {step === 1 && (
+                  {/* Generic step buttons */}
+                  {mode === 'generic' && step === 1 && (
                     <Button
                       size="sm"
                       disabled={!companyName.trim() || loading}
@@ -1217,7 +1813,7 @@ export function OnboardingWizard() {
                       {loading ? "Creating..." : "Next"}
                     </Button>
                   )}
-                  {step === 2 && (
+                  {mode === 'generic' && step === 2 && (
                     <Button
                       size="sm"
                       disabled={
@@ -1233,7 +1829,7 @@ export function OnboardingWizard() {
                       {loading ? "Creating..." : "Next"}
                     </Button>
                   )}
-                  {step === 3 && (
+                  {mode === 'generic' && step === 3 && (
                     <Button
                       size="sm"
                       disabled={!taskTitle.trim() || loading}
@@ -1247,7 +1843,7 @@ export function OnboardingWizard() {
                       {loading ? "Creating..." : "Next"}
                     </Button>
                   )}
-                  {step === 4 && (
+                  {mode === 'generic' && step === 4 && (
                     <Button size="sm" disabled={loading} onClick={handleLaunch}>
                       {loading ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -1255,6 +1851,31 @@ export function OnboardingWizard() {
                         <ArrowRight className="h-3.5 w-3.5 mr-1" />
                       )}
                       {loading ? "Creating..." : "Create & Open Issue"}
+                    </Button>
+                  )}
+                  {/* CMV step buttons */}
+                  {mode === 'cmv' && cmvStep < 8 && (
+                    <Button
+                      size="sm"
+                      disabled={!isCmvStepValid() || loading}
+                      onClick={handleCmvNext}
+                    >
+                      <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                      Próximo
+                    </Button>
+                  )}
+                  {mode === 'cmv' && cmvStep === 8 && (
+                    <Button
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => void handleCmvLaunch()}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Rocket className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      {loading ? "Criando..." : "Criar minha empresa de CMV"}
                     </Button>
                   )}
                 </div>
@@ -1266,7 +1887,7 @@ export function OnboardingWizard() {
           <div
             className={cn(
               "hidden md:block overflow-hidden bg-[#1d1d1d] transition-[width,opacity] duration-500 ease-in-out",
-              step === 1 ? "w-1/2 opacity-100" : "w-0 opacity-0"
+              (mode === 'select' || (mode === 'generic' && step === 1)) ? "w-1/2 opacity-100" : "w-0 opacity-0"
             )}
           >
             <AsciiArtAnimation />
