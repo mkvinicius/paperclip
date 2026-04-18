@@ -18,10 +18,9 @@ import { cn } from "../lib/utils";
 /* ---------- types (replace with API shapes when endpoints exist) ---------- */
 
 type CmvSnapshot = {
-  cmvActualBps: number;    // e.g. 3420 = 34.20%
-  cmvTargetBps: number;    // e.g. 3200 = 32.00%
+  actualCmvBps: number;        // e.g. 3420 = 34.20%
+  theoreticalCmvBps: number;   // e.g. 3200 = 32.00% (meta teórica)
   faturamentoCents: number;
-  avgTicketCents: number;
 };
 
 type CmvAlert = {
@@ -176,7 +175,7 @@ export function CmvDashboard() {
 
   // TODO: replace these with useQuery calls when CMV API endpoints are available.
   // e.g.: const { data: snapshot } = useQuery({ queryKey: ["cmv", "snapshot", selectedCompanyId], ... });
-  const snapshot: CmvSnapshot | null = null;
+  const snapshot = null as CmvSnapshot | null;
   const alerts: CmvAlert[] = [];
   const suppliers: SupplierRow[] = [];
   const trendPoints: TrendPoint[] = [];
@@ -199,7 +198,7 @@ export function CmvDashboard() {
         <ChefHat className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Gestão de CMV</h1>
         {hasData && (
-          <CmvStatusChip actualBps={snapshot!.cmvActualBps} targetBps={snapshot!.cmvTargetBps} />
+          <CmvStatusChip actualBps={snapshot!.actualCmvBps} targetBps={snapshot!.theoreticalCmvBps} />
         )}
       </div>
 
@@ -212,15 +211,15 @@ export function CmvDashboard() {
             <div className="border border-border rounded-lg overflow-hidden">
               <MetricCard
                 icon={TrendingDown}
-                value={hasData ? fmtPct(snapshot!.cmvActualBps) : "—"}
+                value={hasData ? fmtPct(snapshot!.actualCmvBps) : "—"}
                 label="CMV atual"
-                description={hasData ? `Meta: ${fmtPct(snapshot!.cmvTargetBps)}` : "Sem dados ainda"}
+                description={hasData ? `Meta: ${fmtPct(snapshot!.theoreticalCmvBps)}` : "Sem dados ainda"}
               />
             </div>
             <div className="border border-border rounded-lg overflow-hidden">
               <MetricCard
                 icon={TrendingUp}
-                value={hasData ? fmtPct(10000 - snapshot!.cmvActualBps) : "—"}
+                value={hasData ? fmtPct(10000 - snapshot!.actualCmvBps) : "—"}
                 label="Margem estimada"
                 description="Margem bruta"
               />
@@ -228,9 +227,9 @@ export function CmvDashboard() {
             <div className="border border-border rounded-lg overflow-hidden">
               <MetricCard
                 icon={DollarSign}
-                value={hasData ? fmtBRL(snapshot!.avgTicketCents) : "—"}
+                value="—"
                 label="Ticket médio"
-                description="Período atual"
+                description="Disponível em breve"
               />
             </div>
             <div className="border border-border rounded-lg overflow-hidden">
