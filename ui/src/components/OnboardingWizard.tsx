@@ -61,13 +61,14 @@ import {
   Package,
   Truck,
   Calculator,
-  FileText
+  FileText,
+  TrendingUp,
 } from "lucide-react";
 
 
 type Step = 1 | 2 | 3 | 4;
 type Mode = 'select' | 'generic' | 'cmv';
-type CmvStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type CmvStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 type AdapterType = string;
 
 const BUSINESS_TYPES = [
@@ -126,6 +127,10 @@ export function OnboardingWizard() {
   const [cmvFixedCosts, setCmvFixedCosts] = useState("");
   const [cmvHasRecipe, setCmvHasRecipe] = useState<"yes" | "no" | "">("");
   const [cmvRecipeDescription, setCmvRecipeDescription] = useState("");
+  const [cmvWantsMarketing, setCmvWantsMarketing] = useState<"instagram" | "instagram_telegram" | "no" | "">("") ;
+  const [cmvInstagramUser, setCmvInstagramUser] = useState("");
+  const [cmvInstagramToken, setCmvInstagramToken] = useState("");
+  const [cmvTelegramToken, setCmvTelegramToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
@@ -576,7 +581,7 @@ export function OnboardingWizard() {
   }
 
   function handleCmvNext() {
-    setCmvStep((s) => Math.min(s + 1, 8) as CmvStep);
+    setCmvStep((s) => Math.min(s + 1, 9) as CmvStep);
   }
 
   function handleCmvBack() {
@@ -596,7 +601,8 @@ export function OnboardingWizard() {
       case 5: return true;
       case 6: return true;
       case 7: return cmvHasRecipe !== "";
-      case 8: return true;
+      case 8: return cmvWantsMarketing !== "";
+      case 9: return true;
       default: return false;
     }
   }
@@ -640,7 +646,18 @@ ${recipeSection}
 4. Gerar primeiro briefing de boas-vindas
 5. Enviar mensagem de boas-vindas pelo WhatsApp com resumo do setup
 
-Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diario\`.`;
+Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diario\`.
+
+## Marketing Digital
+
+${cmvWantsMarketing === "no" || cmvWantsMarketing === ""
+  ? "Equipe de marketing: não ativada neste momento."
+  : `Equipe de marketing: ativa.
+- Instagram: @${cmvInstagramUser || "a configurar"}
+- Telegram: ${cmvWantsMarketing === "instagram_telegram" ? "ativo" : "não ativado"}
+
+Configure os tokens de API nas configurações da empresa para ativar as publicações automáticas.`
+}`;
   }
 
   async function handleCmvLaunch() {
@@ -765,8 +782,8 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       if (mode === 'cmv') {
-        if (cmvStep < 8 && isCmvStepValid()) handleCmvNext();
-        else if (cmvStep === 8 && !loading) void handleCmvLaunch();
+        if (cmvStep < 9 && isCmvStepValid()) handleCmvNext();
+        else if (cmvStep === 9 && !loading) void handleCmvLaunch();
         return;
       }
       if (step === 1 && companyName.trim()) handleStep1Next();
@@ -843,7 +860,7 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
               {/* Progress bar — CMV mode */}
               {mode === 'cmv' && (
                 <div className="flex items-center gap-1 mb-8">
-                  {([1, 2, 3, 4, 5, 6, 7, 8] as CmvStep[]).map((s) => (
+                  {([1, 2, 3, 4, 5, 6, 7, 8, 9] as CmvStep[]).map((s) => (
                     <div
                       key={s}
                       className={cn(
@@ -853,7 +870,7 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
                     />
                   ))}
                   <span className="ml-2 text-xs text-muted-foreground whitespace-nowrap">
-                    {cmvStep < 8 ? `${cmvStep} / 7` : "Revisão"}
+                    {cmvStep < 9 ? `${cmvStep} / 8` : "Revisão"}
                   </span>
                 </div>
               )}
@@ -1183,8 +1200,92 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
                 </div>
               )}
 
-              {/* CMV Step 8 — Launch review */}
+              {/* CMV Step 8 — Marketing */}
               {mode === 'cmv' && cmvStep === 8 && (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="bg-muted/50 p-2">
+                      <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Quer ativar a equipe de marketing automático?</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Posts semanais no Instagram e Telegram, gerados por IA a partir dos seus dados.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    {(
+                      [
+                        { value: "instagram", label: "Sim, quero posts automáticos no Instagram" },
+                        { value: "instagram_telegram", label: "Sim, quero posts no Instagram e no Telegram também" },
+                        { value: "no", label: "Não por agora" },
+                      ] as { value: "instagram" | "instagram_telegram" | "no"; label: string }[]
+                    ).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md border px-4 py-3 text-sm text-left transition-colors",
+                          cmvWantsMarketing === value
+                            ? "border-foreground bg-accent"
+                            : "border-border hover:bg-accent/50"
+                        )}
+                        onClick={() => setCmvWantsMarketing(value)}
+                      >
+                        <span className={cn(
+                          "h-3.5 w-3.5 rounded-full border-2 shrink-0",
+                          cmvWantsMarketing === value ? "border-foreground bg-foreground" : "border-muted-foreground"
+                        )} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {(cmvWantsMarketing === "instagram" || cmvWantsMarketing === "instagram_telegram") && (
+                    <div className="space-y-3 border border-border rounded-md p-4">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          @usuário do Instagram
+                        </label>
+                        <input
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="seunegocio"
+                          value={cmvInstagramUser}
+                          onChange={(e) => setCmvInstagramUser(e.target.value.replace(/^@/, ""))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Token do Instagram (Graph API)
+                        </label>
+                        <input
+                          type="password"
+                          className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          placeholder="EAA..."
+                          value={cmvInstagramToken}
+                          onChange={(e) => setCmvInstagramToken(e.target.value)}
+                        />
+                      </div>
+                      {cmvWantsMarketing === "instagram_telegram" && (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">
+                            Token do Telegram (opcional)
+                          </label>
+                          <input
+                            type="password"
+                            className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                            placeholder="123456:ABC..."
+                            value={cmvTelegramToken}
+                            onChange={(e) => setCmvTelegramToken(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CMV Step 9 — Launch review */}
+              {mode === 'cmv' && cmvStep === 9 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="bg-muted/50 p-2">
@@ -1233,6 +1334,16 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
                       <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                       <p className="text-xs text-muted-foreground">
                         {cmvHasRecipe === "yes" ? "Ficha técnica informada" : "Ficha técnica: construir junto"}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-2.5">
+                      <TrendingUp className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <p className="text-xs text-muted-foreground">
+                        {cmvWantsMarketing === "no" || cmvWantsMarketing === ""
+                          ? "Marketing automático: não ativado"
+                          : cmvWantsMarketing === "instagram"
+                          ? `Marketing: Instagram @${cmvInstagramUser || "a configurar"}`
+                          : `Marketing: Instagram @${cmvInstagramUser || "a configurar"} + Telegram`}
                       </p>
                     </div>
                   </div>
@@ -1854,7 +1965,7 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
                     </Button>
                   )}
                   {/* CMV step buttons */}
-                  {mode === 'cmv' && cmvStep < 8 && (
+                  {mode === 'cmv' && cmvStep < 9 && (
                     <Button
                       size="sm"
                       disabled={!isCmvStepValid() || loading}
@@ -1864,7 +1975,7 @@ Use as skills: \`calcular-cmv\`, \`entrada-nota\`, \`compras\`, \`briefing-diari
                       Próximo
                     </Button>
                   )}
-                  {mode === 'cmv' && cmvStep === 8 && (
+                  {mode === 'cmv' && cmvStep === 9 && (
                     <Button
                       size="sm"
                       disabled={loading}
